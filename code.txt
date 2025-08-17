@@ -1,0 +1,565 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>M.G. Evergreen Hr. Secondary School — INCOME & EXPENDITURE</title>
+
+  <!-- CDN libs (replace with local files if you want fully offline) -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.19.2/dist/xlsx.full.min.js"></script>
+
+  <style>
+    :root { --overlay-color: rgba(0,0,0,0.55); --card-radius: 12px; }
+    body { background: #f6f8fb; font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; }
+    .card { border-radius: var(--card-radius); box-shadow: 0 6px 18px rgba(0,0,0,0.06); }
+    .btn-round { border-radius: 999px; }
+    .table-fixed { max-height:320px; overflow:auto; display:block; }
+    .table-fixed table { width:100%; }
+    .small-muted { font-size:.9rem; color:#6b7280; }
+    /* Dashboard background & overlay (hidden by default) */
+    #dashboardBg {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: url('building.png') center center / cover no-repeat fixed;
+      z-index: 0;
+      display: none;
+    }
+    #bgOverlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: var(--overlay-color);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      z-index: 0;
+      display: none;
+    }
+    /* Main app content should sit above background */
+    .app-shell { position: relative; z-index: 2; }
+
+    /* Header logo */
+    .header-brand { display: flex; align-items: center; gap: 12px; }
+    .header-brand img { height:48px; width:48px; object-fit:contain; border-radius:8px; }
+
+    /* Login card center */
+    #loginCard { margin-top: 60px; }
+
+    /* Quick link card hover */
+    .quick-card { cursor: pointer; transition: transform .12s ease, background .12s ease; }
+    .quick-card:hover { transform: translateY(-4px); background: #fafafa; }
+
+    /* Small helpers */
+    .muted-small { color:#6b7280; font-size:.9rem; }
+  </style>
+</head>
+<body>
+
+  <!-- Dashboard background and overlay (toggle display via JS) -->
+  <div id="dashboardBg" aria-hidden="true"></div>
+  <div id="bgOverlay" aria-hidden="true"></div>
+
+  <div class="container py-4 app-shell">
+
+    <!-- LOGIN -->
+    <div id="loginCard" class="card p-4 mx-auto" style="max-width:560px;">
+      <div class="text-center mb-3">
+        <!-- logo.png must be placed in same folder -->
+        <img src="logo.png" alt="M.G. Evergreen Logo" style="height:80px; width:80px; object-fit:contain;">
+      </div>
+      <h4 class="mb-3 text-center">Login — M.G. Evergreen Hr. Secondary School</h4>
+      <form id="loginForm" class="row g-3">
+        <div class="col-12">
+          <label class="form-label">User ID</label>
+          <input id="loginUser" class="form-control" required>
+        </div>
+        <div class="col-12">
+          <label class="form-label">Password</label>
+          <input id="loginPass" type="password" class="form-control" required>
+        </div>
+        <div class="col-12 text-end">
+          <button class="btn btn-primary">Login</button>
+        </div>
+        <div class="col-12 muted-small">Default accounts: admin/1234 (admin), user1/1111, user2/2222</div>
+      </form>
+    </div>
+
+    <!-- APP (hidden until login) -->
+    <div id="app" style="display:none">
+
+      <!-- Header -->
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <div class="header-brand">
+          <img src="logo.png" alt="Logo">
+          <div>
+            <h4 class="mb-0">M.G. Evergreen Hr. Secondary School</h4>
+            <div id="welcome" class="small-muted">Welcome</div>
+          </div>
+        </div>
+
+        <div class="d-flex gap-2">
+          <button id="btnLogout" class="btn btn-outline-secondary btn-sm">Logout</button>
+          <button id="btnBackup" class="btn btn-outline-secondary btn-sm">Backup</button>
+          <label id="importLabel" class="btn btn-outline-primary btn-sm mb-0">Import
+            <input id="importFile" type="file" accept="application/json" hidden>
+          </label>
+        </div>
+      </div>
+
+      <!-- Totals -->
+      <div class="row g-4">
+        <div class="col-md-4">
+          <div class="card p-3 text-center">
+            <div class="small-muted">Total Income</div>
+            <h4 id="totalIncome">0.00</h4>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card p-3 text-center">
+            <div class="small-muted">Total Expenditure</div>
+            <h4 id="totalExp">0.00</h4>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card p-3 text-center">
+            <div class="small-muted">Balance</div>
+            <h4 id="balance">0.00</h4>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick links -->
+      <div class="row g-4 mt-3">
+        <div class="col-md-6">
+          <div class="card p-4 quick-card text-center" role="button" onclick="openPanel('incomePanel')">
+            <h5 class="mb-0">+ Add Income</h5>
+            <div class="muted-small">Open Income form</div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="card p-4 quick-card text-center" role="button" onclick="openPanel('expPanel')">
+            <h5 class="mb-0">+ Add Expenditure</h5>
+            <div class="muted-small">Open Expenditure form</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chart -->
+      <div class="row mt-4">
+        <div class="col-md-12">
+          <div class="card p-3">
+            <canvas id="barChart" height="100"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <ul class="nav nav-tabs mt-4" id="tabs">
+        <li class="nav-item"><a class="nav-link active" href="#" data-key="dashboardPanel" onclick="switchPanel('dashboardPanel')">Dashboard</a></li>
+        <li class="nav-item"><a class="nav-link" href="#" data-key="incomePanel" onclick="switchPanel('incomePanel')">Income</a></li>
+        <li class="nav-item"><a class="nav-link" href="#" data-key="expPanel" onclick="switchPanel('expPanel')">Expenditure</a></li>
+        <li class="nav-item"><a class="nav-link" href="#" data-key="reportsPanel" onclick="switchPanel('reportsPanel')">Reports</a></li>
+        <li class="nav-item"><a class="nav-link" href="#" data-key="backupPanel" onclick="switchPanel('backupPanel')">Backup/Restore</a></li>
+      </ul>
+
+      <div id="panels" class="mt-3">
+        <!-- Dashboard Panel (empty placeholder; totals & chart above) -->
+        <div id="dashboardPanel" class="panel"></div>
+
+        <!-- Income Panel -->
+        <div id="incomePanel" class="panel" style="display:none">
+          <div class="card p-3">
+            <h5>Add / Edit Income</h5>
+            <form id="incomeForm" class="row g-2">
+              <input type="hidden" id="incomeEditIndex">
+              <div class="col-md-2"><label class="form-label">Sl. No.</label><input id="incomeSl" class="form-control" readonly></div>
+              <div class="col-md-3"><label class="form-label">Date</label><input id="incomeDate" type="date" class="form-control" required></div>
+              <div class="col-md-4"><label class="form-label">Particulars</label><input id="incomePart" class="form-control" required></div>
+              <div class="col-md-3"><label class="form-label">Voucher No.</label><input id="incomeVoucher" class="form-control"></div>
+              <div class="col-md-3"><label class="form-label">Amount</label><input id="incomeAmount" type="number" step="0.01" class="form-control" required></div>
+              <div class="col-md-9"><label class="form-label">Remark</label><input id="incomeRemark" class="form-control"></div>
+              <div class="col-12 text-end">
+                <button class="btn btn-primary" type="submit">Save</button>
+                <button class="btn btn-outline-secondary" type="button" onclick="resetIncomeForm()">Reset</button>
+              </div>
+            </form>
+
+            <div class="table-fixed mt-3">
+              <table class="table table-striped">
+                <thead><tr><th>Sl</th><th>Date</th><th>Particulars</th><th>Voucher</th><th class="text-end">Amount</th><th>Remark</th><th>Actions</th></tr></thead>
+                <tbody id="incomeBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Expenditure Panel -->
+        <div id="expPanel" class="panel" style="display:none">
+          <div class="card p-3">
+            <h5>Add / Edit Expenditure</h5>
+            <form id="expForm" class="row g-2">
+              <input type="hidden" id="expEditIndex">
+              <div class="col-md-2"><label class="form-label">Sl. No.</label><input id="expSl" class="form-control" readonly></div>
+              <div class="col-md-3"><label class="form-label">Date</label><input id="expDate" type="date" class="form-control" required></div>
+              <div class="col-md-4"><label class="form-label">Particulars</label><input id="expPart" class="form-control" required></div>
+              <div class="col-md-3"><label class="form-label">Voucher No.</label><input id="expVoucher" class="form-control"></div>
+              <div class="col-md-3"><label class="form-label">Amount</label><input id="expAmount" type="number" step="0.01" class="form-control" required></div>
+              <div class="col-md-9"><label class="form-label">Remark</label><input id="expRemark" class="form-control"></div>
+              <div class="col-12 text-end">
+                <button class="btn btn-primary" type="submit">Save</button>
+                <button class="btn btn-outline-secondary" type="button" onclick="resetExpForm()">Reset</button>
+              </div>
+            </form>
+
+            <div class="table-fixed mt-3">
+              <table class="table table-striped">
+                <thead><tr><th>Sl</th><th>Date</th><th>Particulars</th><th>Voucher</th><th class="text-end">Amount</th><th>Remark</th><th>Actions</th></tr></thead>
+                <tbody id="expBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Reports Panel -->
+        <div id="reportsPanel" class="panel" style="display:none">
+          <div class="card p-3">
+            <h5>Reports</h5>
+
+            <div class="row g-3 mb-2">
+
+              <div class="col-md-6">
+                <h6>Income Report</h6>
+                <div class="input-group mb-2">
+                  <input id="incFrom" type="date" class="form-control" placeholder="From">
+                  <input id="incTo" type="date" class="form-control" placeholder="To">
+                  <button class="btn btn-outline-secondary" onclick="applyIncomeFilter()">Filter</button>
+                  <button class="btn btn-success" onclick="exportIncome()">Export Income</button>
+                </div>
+                <div class="table-fixed"><table class="table"><thead><tr><th>Sl</th><th>Date</th><th>Particulars</th><th>Voucher</th><th class="text-end">Amount</th><th>Remark</th><th>Actions</th></tr></thead><tbody id="reportInc"></tbody></table></div>
+              </div>
+
+              <div class="col-md-6">
+                <h6>Expenditure Report</h6>
+                <div class="input-group mb-2">
+                  <input id="expFrom" type="date" class="form-control" placeholder="From">
+                  <input id="expTo" type="date" class="form-control" placeholder="To">
+                  <button class="btn btn-outline-secondary" onclick="applyExpFilter()">Filter</button>
+                  <button class="btn btn-success" onclick="exportExp()">Export Expenditure</button>
+                </div>
+                <div class="table-fixed"><table class="table"><thead><tr><th>Sl</th><th>Date</th><th>Particulars</th><th>Voucher</th><th class="text-end">Amount</th><th>Remark</th><th>Actions</th></tr></thead><tbody id="reportExp"></tbody></table></div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+        <!-- Backup/Restore Panel (admin only) -->
+        <div id="backupPanel" class="panel" style="display:none">
+          <div class="card p-3">
+            <h5>Backup & Restore (Admin only)</h5>
+            <div class="mb-2">
+              <button id="downloadBackupBtn" class="btn btn-warning">Download JSON Backup</button>
+              <button id="exportAllBtn" class="btn btn-success">Export All to Excel</button>
+            </div>
+            <div class="mb-1">
+              <label class="form-label">Import JSON backup (replaces data)</label>
+              <input id="adminImport" type="file" accept="application/json" class="form-control">
+            </div>
+          </div>
+        </div>
+
+      </div> <!-- panels end -->
+
+    </div> <!-- app end -->
+  </div> <!-- container end -->
+
+<script>
+/* Simple local webapp.
+ - Credentials in code for local use only.
+ - Data stored in localStorage under keys: 'mge_inc', 'mge_exp'
+ - Admin: admin/1234  Users: user1/1111 user2/2222
+*/
+
+const USERS = { admin:{pwd:'1234',role:'admin'}, user1:{pwd:'1111',role:'user'}, user2:{pwd:'2222',role:'user'} };
+const KEY_INC = 'mge_inc_v1', KEY_EXP = 'mge_exp_v1';
+
+let state = { inc: JSON.parse(localStorage.getItem(KEY_INC) || '[]'), exp: JSON.parse(localStorage.getItem(KEY_EXP) || '[]') };
+let currentUser = null;
+let barChart = null;
+
+// LOGIN
+document.getElementById('loginForm').addEventListener('submit', (e)=>{
+  e.preventDefault();
+  const u = document.getElementById('loginUser').value.trim();
+  const p = document.getElementById('loginPass').value;
+  if(USERS[u] && USERS[u].pwd === p) { currentUser = { id: u, role: USERS[u].role }; afterLogin(); }
+  else { alert('Invalid credentials'); }
+});
+
+function afterLogin(){
+  document.getElementById('loginCard').style.display='none';
+  document.getElementById('app').style.display='';
+  // show background & overlay
+  document.getElementById('dashboardBg').style.display = '';
+  document.getElementById('bgOverlay').style.display = '';
+  document.getElementById('welcome').innerText = `Welcome, ${currentUser.id} (${currentUser.role})`;
+  // role-based controls
+  document.getElementById('btnBackup').style.display = currentUser.role === 'admin' ? '' : 'none';
+  document.getElementById('importLabel').style.display = currentUser.role === 'admin' ? '' : 'none';
+  document.getElementById('backupPanel').style.display = currentUser.role === 'admin' ? '' : 'none';
+  renderAll();
+  switchPanel('dashboardPanel');
+}
+
+// LOGOUT
+document.getElementById('btnLogout').addEventListener('click', ()=>{
+  if(!confirm('Logout?')) return;
+  currentUser = null;
+  document.getElementById('app').style.display='none';
+  document.getElementById('loginCard').style.display='';
+  // hide background
+  document.getElementById('dashboardBg').style.display = 'none';
+  document.getElementById('bgOverlay').style.display = 'none';
+  document.getElementById('loginForm').reset();
+});
+
+// UI panel switching
+function switchPanel(key) {
+  document.querySelectorAll('#panels > div').forEach(d => d.style.display = 'none');
+  const el = document.getElementById(key);
+  if(el) el.style.display = '';
+  document.querySelectorAll('#tabs .nav-link').forEach(a => a.classList.remove('active'));
+  document.querySelector(`#tabs .nav-link[data-key="${key}"]`)?.classList.add('active');
+}
+function openPanel(key){ switchPanel(key); window.scrollTo({top:0,behavior:'smooth'}); }
+
+// helpers
+function saveState(){ localStorage.setItem(KEY_INC, JSON.stringify(state.inc)); localStorage.setItem(KEY_EXP, JSON.stringify(state.exp)); }
+function formatNum(v){ return Number(v||0).toFixed(2); }
+function escapeHtml(s){ if(s==null) return ''; return String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;'); }
+function actionButtons(type, idx){
+  const canDelete = currentUser?.role === 'admin';
+  const editBtn = `<button class="btn btn-sm btn-outline-primary me-1" onclick="editRow('${type}',${idx})">Edit</button>`;
+  const delBtn = canDelete ? `<button class="btn btn-sm btn-outline-danger" onclick="deleteRow('${type}',${idx})">Delete</button>` : `<button class="btn btn-sm btn-outline-secondary" disabled title="No delete permission">Delete</button>`;
+  return editBtn + delBtn;
+}
+
+// render lists + totals + chart
+function renderAll(){
+  document.getElementById('incomeSl').value = state.inc.length + 1;
+  document.getElementById('expSl').value = state.exp.length + 1;
+
+  // income body
+  const incBody = document.getElementById('incomeBody'); incBody.innerHTML = '';
+  state.inc.forEach((r,i)=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${i+1}</td><td>${escapeHtml(r.date)}</td><td>${escapeHtml(r.particulars)}</td><td>${escapeHtml(r.voucher||'')}</td>
+      <td class="text-end">${formatNum(r.amount)}</td><td>${escapeHtml(r.remark||'')}</td><td>${actionButtons('inc',i)}</td>`;
+    incBody.appendChild(tr);
+  });
+
+  // exp body
+  const expBody = document.getElementById('expBody'); expBody.innerHTML = '';
+  state.exp.forEach((r,i)=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${i+1}</td><td>${escapeHtml(r.date)}</td><td>${escapeHtml(r.particulars)}</td><td>${escapeHtml(r.voucher||'')}</td>
+      <td class="text-end">${formatNum(r.amount)}</td><td>${escapeHtml(r.remark||'')}</td><td>${actionButtons('exp',i)}</td>`;
+    expBody.appendChild(tr);
+  });
+
+  // totals & chart
+  const totalInc = state.inc.reduce((s,x)=> s + Number(x.amount||0), 0);
+  const totalExp = state.exp.reduce((s,x)=> s + Number(x.amount||0), 0);
+  document.getElementById('totalIncome').innerText = formatNum(totalInc);
+  document.getElementById('totalExp').innerText = formatNum(totalExp);
+  document.getElementById('balance').innerText = formatNum(totalInc - totalExp);
+  updateBarChart(totalInc, totalExp);
+
+  applyIncomeFilter(); applyExpFilter();
+}
+
+// Save income form
+document.getElementById('incomeForm').addEventListener('submit', (e)=>{
+  e.preventDefault();
+  const idx = document.getElementById('incomeEditIndex').value;
+  const rec = {
+    date: document.getElementById('incomeDate').value || '',
+    particulars: document.getElementById('incomePart').value.trim(),
+    voucher: document.getElementById('incomeVoucher').value.trim(),
+    amount: Number(parseFloat(document.getElementById('incomeAmount').value||0).toFixed(2)),
+    remark: document.getElementById('incomeRemark').value.trim()
+  };
+  if(!rec.date){ alert('Enter date'); return; }
+  if(idx === '') state.inc.push(rec); else state.inc[Number(idx)] = rec;
+  saveState(); resetIncomeForm(); renderAll(); switchPanel('dashboardPanel');
+});
+function resetIncomeForm(){
+  document.getElementById('incomeForm').reset();
+  document.getElementById('incomeEditIndex').value = '';
+  document.getElementById('incomeSl').value = state.inc.length + 1;
+}
+
+// Save expenditure form
+document.getElementById('expForm').addEventListener('submit', (e)=>{
+  e.preventDefault();
+  const idx = document.getElementById('expEditIndex').value;
+  const rec = {
+    date: document.getElementById('expDate').value || '',
+    particulars: document.getElementById('expPart').value.trim(),
+    voucher: document.getElementById('expVoucher').value.trim(),
+    amount: Number(parseFloat(document.getElementById('expAmount').value||0).toFixed(2)),
+    remark: document.getElementById('expRemark').value.trim()
+  };
+  if(!rec.date){ alert('Enter date'); return; }
+  if(idx === '') state.exp.push(rec); else state.exp[Number(idx)] = rec;
+  saveState(); resetExpForm(); renderAll(); switchPanel('dashboardPanel');
+});
+function resetExpForm(){
+  document.getElementById('expForm').reset();
+  document.getElementById('expEditIndex').value = '';
+  document.getElementById('expSl').value = state.exp.length + 1;
+}
+
+// edit / delete handlers
+function editRow(type, index){
+  if(type === 'inc'){
+    const r = state.inc[index];
+    document.getElementById('incomeEditIndex').value = index;
+    document.getElementById('incomeSl').value = index+1;
+    document.getElementById('incomeDate').value = r.date;
+    document.getElementById('incomePart').value = r.particulars;
+    document.getElementById('incomeVoucher').value = r.voucher || '';
+    document.getElementById('incomeAmount').value = r.amount;
+    document.getElementById('incomeRemark').value = r.remark || '';
+    openPanel('incomePanel');
+  } else {
+    const r = state.exp[index];
+    document.getElementById('expEditIndex').value = index;
+    document.getElementById('expSl').value = index+1;
+    document.getElementById('expDate').value = r.date;
+    document.getElementById('expPart').value = r.particulars;
+    document.getElementById('expVoucher').value = r.voucher || '';
+    document.getElementById('expAmount').value = r.amount;
+    document.getElementById('expRemark').value = r.remark || '';
+    openPanel('expPanel');
+  }
+}
+function deleteRow(type, index){
+  if(currentUser?.role !== 'admin'){ alert('Only admin can delete'); return; }
+  if(!confirm('Delete this record?')) return;
+  if(type === 'inc') state.inc.splice(index,1); else state.exp.splice(index,1);
+  saveState(); renderAll();
+}
+
+// Reports filters (separate)
+function applyIncomeFilter(){
+  const from = document.getElementById('incFrom').value;
+  const to = document.getElementById('incTo').value;
+  const out = document.getElementById('reportInc'); out.innerHTML = '';
+  const fromD = from ? new Date(from) : null;
+  const toD = to ? new Date(to) : null;
+  state.inc.forEach((r,i)=>{
+    const d = new Date(r.date);
+    if((fromD && d < fromD) || (toD && d > toD)) return;
+    out.innerHTML += `<tr><td>${i+1}</td><td>${escapeHtml(r.date)}</td><td>${escapeHtml(r.particulars)}</td><td>${escapeHtml(r.voucher||'')}</td>
+      <td class="text-end">${formatNum(r.amount)}</td><td>${escapeHtml(r.remark||'')}</td><td>${actionButtons('inc',i)}</td></tr>`;
+  });
+}
+function applyExpFilter(){
+  const from = document.getElementById('expFrom').value;
+  const to = document.getElementById('expTo').value;
+  const out = document.getElementById('reportExp'); out.innerHTML = '';
+  const fromD = from ? new Date(from) : null;
+  const toD = to ? new Date(to) : null;
+  state.exp.forEach((r,i)=>{
+    const d = new Date(r.date);
+    if((fromD && d < fromD) || (toD && d > toD)) return;
+    out.innerHTML += `<tr><td>${i+1}</td><td>${escapeHtml(r.date)}</td><td>${escapeHtml(r.particulars)}</td><td>${escapeHtml(r.voucher||'')}</td>
+      <td class="text-end">${formatNum(r.amount)}</td><td>${escapeHtml(r.remark||'')}</td><td>${actionButtons('exp',i)}</td></tr>`;
+  });
+}
+
+// Exports: use filtered rows visible in report tables
+function exportIncome(){
+  const rows = Array.from(document.querySelectorAll('#reportInc tr')).map(tr => {
+    const cs = tr.querySelectorAll('td');
+    return { 'Sl No': cs[0].innerText, Date: cs[1].innerText, Particulars: cs[2].innerText, 'Voucher No': cs[3].innerText, Amount: Number(cs[4].innerText), Remark: cs[5].innerText };
+  });
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Income');
+  XLSX.writeFile(wb, 'MGEvergreen_Income_Report.xlsx');
+}
+function exportExp(){
+  const rows = Array.from(document.querySelectorAll('#reportExp tr')).map(tr => {
+    const cs = tr.querySelectorAll('td');
+    return { 'Sl No': cs[0].innerText, Date: cs[1].innerText, Particulars: cs[2].innerText, 'Voucher No': cs[3].innerText, Amount: Number(cs[4].innerText), Remark: cs[5].innerText };
+  });
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Expenditure');
+  XLSX.writeFile(wb, 'MGEvergreen_Expenditure_Report.xlsx');
+}
+
+// Backup / Import (admin only)
+document.getElementById('downloadBackupBtn').addEventListener('click', ()=>{
+  if(currentUser?.role !== 'admin'){ alert('Only admin can backup'); return; }
+  const payload = { exported_at: new Date().toISOString(), inc: state.inc, exp: state.exp };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type:'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `MGEvergreen_backup_${new Date().toISOString().slice(0,19).replace(/[:T]/g,'')}.json`; a.click();
+});
+document.getElementById('adminImport').addEventListener('change', (e)=>{
+  if(currentUser?.role !== 'admin'){ alert('Only admin can import'); e.target.value=''; return; }
+  const f = e.target.files[0]; if(!f) return;
+  const r = new FileReader(); r.onload = ()=> {
+    try {
+      const json = JSON.parse(r.result);
+      if(Array.isArray(json.inc) && Array.isArray(json.exp)) {
+        if(confirm('Replace existing data?')) { state.inc = json.inc; state.exp = json.exp; saveState(); renderAll(); alert('Import complete'); }
+      } else alert('Invalid backup structure');
+    } catch { alert('Invalid JSON file'); }
+  }; r.readAsText(f);
+});
+
+// top import file (header)
+document.getElementById('importFile').addEventListener('change', (e)=>{
+  if(currentUser?.role !== 'admin'){ e.target.value=''; alert('Only admin can import'); return; }
+  const f = e.target.files[0]; if(!f) return;
+  const r = new FileReader(); r.onload = ()=> {
+    try {
+      const json = JSON.parse(r.result);
+      if(Array.isArray(json.inc) && Array.isArray(json.exp)) {
+        if(confirm('Replace existing data?')) { state.inc = json.inc; state.exp = json.exp; saveState(); renderAll(); alert('Import complete'); }
+      } else alert('Invalid backup structure');
+    } catch { alert('Invalid JSON file'); }
+  }; r.readAsText(f);
+});
+
+// Export all (admin)
+document.getElementById('exportAllBtn')?.addEventListener('click', ()=>{
+  const wb = XLSX.utils.book_new();
+  const incSheet = state.inc.map((r,i)=>({ 'Sl No': i+1, Date: r.date, Particulars: r.particulars, 'Voucher No': r.voucher, Amount: r.amount, Remark: r.remark }));
+  const expSheet = state.exp.map((r,i)=>({ 'Sl No': i+1, Date: r.date, Particulars: r.particulars, 'Voucher No': r.voucher, Amount: r.amount, Remark: r.remark }));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(incSheet), 'Income');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(expSheet), 'Expenditure');
+  XLSX.writeFile(wb, `MGEvergreen_All_${new Date().toISOString().slice(0,19).replace(/[:T]/g,'')}.xlsx`);
+});
+
+// Chart update
+function updateBarChart(inc, exp){
+  const ctx = document.getElementById('barChart');
+  if(barChart) barChart.destroy();
+  barChart = new Chart(ctx, { type:'bar', data:{ labels:['Income','Expenditure'], datasets:[{label:'Amount', data:[inc,exp], backgroundColor:['#198754','#dc3545']}] }, options:{ responsive:true, plugins:{legend:{display:false}} } });
+}
+
+// init
+(function init(){
+  state.inc = state.inc || [];
+  state.exp = state.exp || [];
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('dashboardBg').style.display = 'none';
+  document.getElementById('bgOverlay').style.display = 'none';
+  applyIncomeFilter(); applyExpFilter();
+})();
+</script>
+
+</body>
+</html>
